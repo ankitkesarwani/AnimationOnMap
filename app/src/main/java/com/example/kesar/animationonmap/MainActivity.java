@@ -1,22 +1,31 @@
 package com.example.kesar.animationonmap;
 
 import android.Manifest;
+import android.animation.ValueAnimator;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Camera;
 import android.graphics.Color;
+import android.graphics.drawable.BitmapDrawable;
 import android.location.Location;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.animation.LinearInterpolator;
 import android.widget.Toast;
 import com.android.volley.DefaultRetryPolicy;
 import com.android.volley.Request;
+import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.common.api.ResultCallback;
@@ -26,17 +35,28 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsResult;
 import com.google.android.gms.location.LocationSettingsStatusCodes;
+import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
+import com.google.android.gms.maps.model.SquareCap;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.List;
+
+import static com.google.android.gms.maps.model.JointType.ROUND;
 
 public class MainActivity extends AppCompatActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleMap.OnMapClickListener {
 
@@ -53,10 +73,18 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     private static final int PERMISSION_LOCATION_REQUEST_CODE = 100;
     private List<LatLng> latLngList;
     private MarkerOptions yourLocationMarker;
+    private int markerCount;
 
     //private TextInputLayout mSource;
     //private TextInputLayout mDestination;
     //private Button mGoBtn;
+
+    /*private LatLng mMarkLocation;
+    private LatLng defaultLocation;
+    private LatLng destinationLocation;
+    private LatLng startPosition;
+    private LatLng endPosition;
+    private Marker marker;*/
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -90,6 +118,168 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         mMap = googleMap;
         mMap.setOnMapClickListener(this);
 
+        /*mMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
+        mMap.setTrafficEnabled(false);
+        mMap.setIndoorEnabled(false);
+        mMap.setBuildingsEnabled(false);
+        mMap.getUiSettings().setZoomControlsEnabled(true);
+
+        mMarkLocation = new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude());
+
+        mMap.addMarker(new MarkerOptions().position(mMarkLocation).title("Marker in Home"));
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(mMarkLocation));
+        mMap.moveCamera(CameraUpdateFactory.newCameraPosition(new CameraPosition.Builder()
+        .target(googleMap.getCameraPosition().target)
+        .zoom(17)
+        .bearing(30)
+        .tilt(45)
+        .build()));
+        String requestUrl = null;
+        try {
+            requestUrl = "https://maps.googleapis.com/maps/api/directions/json?" +
+                    "mode=driving&"
+                    + "transit_routing_preference=less_driving&"
+                    + "origin=" + defaultLocation.latitude + "," + defaultLocation.longitude + "&"
+                    + "destination=" + destinationLocation + "&"
+                    + "key=" + getResources().getString(Integer.parseInt("AIzaSyAYWzb0LPw2uWB0Cw2y_dkHMA7zVHST0cQ"));
+            Log.d(TAG, requestUrl);
+            JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.GET,
+                    requestUrl, (JSONObject) null,
+                    new Response.Listener<JSONObject>() {
+                        @Override
+                        public void onResponse(JSONObject response) {
+                            Log.d(TAG, response + "");
+                            try {
+                                JSONArray jsonArray = response.getJSONArray("routes");
+                                for (int i = 0; i < jsonArray.length(); i++) {
+                                    JSONObject route = jsonArray.getJSONObject(i);
+                                    JSONObject poly = route.getJSONObject("overview_polyline");
+                                    String polyline = poly.getString("points");
+                                    latLngList = decodePoly(polyline);
+                                    Log.d(TAG, latLngList + "");
+                                }
+                                //Adjusting bounds
+                                LatLngBounds.Builder builder = new LatLngBounds.Builder();
+                                for (LatLng latLng : latLngList) {
+                                    builder.include(latLng);
+                                }
+                                LatLngBounds bounds = builder.build();
+                                CameraUpdate mCameraUpdate = CameraUpdateFactory.newLatLngBounds(bounds, 2);
+                                mMap.animateCamera(mCameraUpdate);
+
+                                PolylineOptions polylineOptions = new PolylineOptions();
+                                polylineOptions.color(Color.GRAY);
+                                polylineOptions.width(5);
+                                polylineOptions.startCap(new SquareCap());
+                                polylineOptions.endCap(new SquareCap());
+                                polylineOptions.jointType(ROUND);
+                                polylineOptions.addAll(latLngList);
+                                final Polyline greyPolyLine = mMap.addPolyline(polylineOptions);
+
+                                PolylineOptions blackPolylineOptions = new PolylineOptions();
+                                blackPolylineOptions.width(5);
+                                blackPolylineOptions.color(Color.BLACK);
+                                blackPolylineOptions.startCap(new SquareCap());
+                                blackPolylineOptions.endCap(new SquareCap());
+                                blackPolylineOptions.jointType(ROUND);
+                                final Polyline blackPolyline = mMap.addPolyline(blackPolylineOptions);
+
+                                mMap.addMarker(new MarkerOptions()
+                                        .position(latLngList.get(latLngList.size() - 1)));
+
+                                ValueAnimator polylineAnimator = ValueAnimator.ofInt(0, 100);
+                                polylineAnimator.setDuration(2000);
+                                polylineAnimator.setInterpolator(new LinearInterpolator());
+                                polylineAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                                    @Override
+                                    public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                                        List<LatLng> points = greyPolyLine.getPoints();
+                                        int percentValue = (int) valueAnimator.getAnimatedValue();
+                                        int size = points.size();
+                                        int newPoints = (int) (size * (percentValue / 100.0f));
+                                        List<LatLng> p = points.subList(0, newPoints);
+                                        blackPolyline.setPoints(p);
+                                    }
+                                });
+                                polylineAnimator.start();
+                                marker = mMap.addMarker(new MarkerOptions().position(mMarkLocation)
+                                        .flat(true)
+                                        .icon(BitmapDescriptorFactory.fromResource(R.drawable.car)));
+                                final Handler handler = new Handler();
+                                final int[] index = {-1};
+                                final int[] next = {1};
+                                handler.postDelayed(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (index[0] < latLngList.size() - 1) {
+                                            index[0]++;
+                                            next[0] = index[0] + 1;
+                                        }
+                                        if (index[0] < latLngList.size() - 1) {
+                                            startPosition = latLngList.get(index[0]);
+                                            endPosition = latLngList.get(next[0]);
+                                        }
+                                        ValueAnimator valueAnimator = ValueAnimator.ofFloat(0, 1);
+                                        valueAnimator.setDuration(3000);
+                                        valueAnimator.setInterpolator(new LinearInterpolator());
+                                        valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                                            @Override
+                                            public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                                                double v = valueAnimator.getAnimatedFraction();
+                                                double lng = v * endPosition.longitude + (1 - v)
+                                                        * startPosition.longitude;
+                                                double lat = v * endPosition.latitude + (1 - v)
+                                                        * startPosition.latitude;
+                                                LatLng newPos = new LatLng(lat, lng);
+                                                marker.setPosition(newPos);
+                                                marker.setAnchor(0.5f, 0.5f);
+                                                marker.setRotation(getBearing(startPosition, newPos));
+                                                mMap.moveCamera(CameraUpdateFactory
+                                                        .newCameraPosition
+                                                                (new CameraPosition.Builder()
+                                                                        .target(newPos)
+                                                                        .zoom(15.5f)
+                                                                        .build()));
+                                            }
+                                        });
+                                        valueAnimator.start();
+                                        handler.postDelayed(this, 3000);
+                                    }
+                                }, 3000);
+
+
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+
+                        }
+                    }, new Response.ErrorListener() {
+                @Override
+                public void onErrorResponse(VolleyError error) {
+                    Log.d(TAG, error + "");
+                }
+            });
+            RequestQueue requestQueue = Volley.newRequestQueue(this);
+            requestQueue.add(jsonObjectRequest);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }*/
+
+    }
+
+    private float getBearing(LatLng begin, LatLng end) {
+        double lat = Math.abs(begin.latitude - end.latitude);
+        double lng = Math.abs(begin.longitude - end.longitude);
+
+        if (begin.latitude < end.latitude && begin.longitude < end.longitude)
+            return (float) (Math.toDegrees(Math.atan(lng / lat)));
+        else if (begin.latitude >= end.latitude && begin.longitude < end.longitude)
+            return (float) ((90 - Math.toDegrees(Math.atan(lng / lat))) + 90);
+        else if (begin.latitude >= end.latitude && begin.longitude >= end.longitude)
+            return (float) (Math.toDegrees(Math.atan(lng / lat)) + 180);
+        else if (begin.latitude < end.latitude && begin.longitude >= end.longitude)
+            return (float) ((90 - Math.toDegrees(Math.atan(lng / lat))) + 270);
+        return -1;
     }
 
     @Override
@@ -244,7 +434,105 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         mapObject.addMarker(new MarkerOptions().position(location).title("Current Location"));
         mapObject.moveCamera(CameraUpdateFactory.newLatLng(location));
+        addMarker(mapObject, location.latitude, location.longitude);
 
+    }
+
+    Marker mk = null;
+    // Add A Map Pointer To The MAp
+    public void addMarker(GoogleMap googleMap, double lat, double lon) {
+
+        if(markerCount==1){
+            animateMarker(mLastLocation,mk);
+        }
+
+        else if (markerCount==0){
+            //Set Custom BitMap for Pointer
+            int height = 80;
+            int width = 45;
+            BitmapDrawable bitmapdraw = (BitmapDrawable) getResources().getDrawable(R.drawable.car);
+            Bitmap b = bitmapdraw.getBitmap();
+            Bitmap smallMarker = Bitmap.createScaledBitmap(b, width, height, false);
+            mMap = googleMap;
+
+            LatLng latlong = new LatLng(lat, lon);
+            mk= mMap.addMarker(new MarkerOptions().position(new LatLng(lat, lon))
+                    //.icon(BitmapDescriptorFactory.fromResource(R.drawable.pin3))
+                    .icon(BitmapDescriptorFactory.fromBitmap((smallMarker))));
+            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latlong, 16));
+
+            //Set Marker Count to 1 after first marker is created
+            markerCount=1;
+
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                return;
+            }
+            //mMap.setMyLocationEnabled(true);
+            //startLocationUpdates();
+        }
+    }
+
+    public static void animateMarker(final Location destination, final Marker marker) {
+        if (marker != null) {
+            final LatLng startPosition = marker.getPosition();
+            final LatLng endPosition = new LatLng(destination.getLatitude(), destination.getLongitude());
+
+            final float startRotation = marker.getRotation();
+
+            final LatLngInterpolator latLngInterpolator = new LatLngInterpolator.LinearFixed();
+            ValueAnimator valueAnimator = ValueAnimator.ofFloat(0, 1);
+            valueAnimator.setDuration(1000); // duration 1 second
+            valueAnimator.setInterpolator(new LinearInterpolator());
+            valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override public void onAnimationUpdate(ValueAnimator animation) {
+                    try {
+                        float v = animation.getAnimatedFraction();
+                        LatLng newPosition = latLngInterpolator.interpolate(v, startPosition, endPosition);
+                        marker.setPosition(newPosition);
+                        marker.setRotation(computeRotation(v, startRotation, destination.getBearing()));
+                    } catch (Exception ex) {
+                        // I don't care atm..
+                    }
+                }
+            });
+
+            valueAnimator.start();
+        }
+    }
+
+    private interface LatLngInterpolator {
+        LatLng interpolate(float fraction, LatLng a, LatLng b);
+
+        class LinearFixed implements LatLngInterpolator {
+            @Override
+            public LatLng interpolate(float fraction, LatLng a, LatLng b) {
+                double lat = (b.latitude - a.latitude) * fraction + a.latitude;
+                double lngDelta = b.longitude - a.longitude;
+                // Take the shortest path across the 180th meridian.
+                if (Math.abs(lngDelta) > 180) {
+                    lngDelta -= Math.signum(lngDelta) * 360;
+                }
+                double lng = lngDelta * fraction + a.longitude;
+                return new LatLng(lat, lng);
+            }
+        }
+    }
+
+    private static float computeRotation(float fraction, float start, float end) {
+        float normalizeEnd = end - start; // rotate start to 0
+        float normalizedEndAbs = (normalizeEnd + 360) % 360;
+
+        float direction = (normalizedEndAbs > 180) ? -1 : 1; // -1 = anticlockwise, 1 = clockwise
+        float rotation;
+        if (direction > 0) {
+            rotation = normalizedEndAbs;
+        } else {
+            rotation = normalizedEndAbs - 360;
+        }
+
+        float result = fraction * rotation + start;
+        return (result + 360) % 360;
     }
 
     public void refreshMap(GoogleMap mapInstance) {
